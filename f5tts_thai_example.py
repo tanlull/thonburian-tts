@@ -2,7 +2,12 @@
 Demonstration of F5-TTS Engine for Thai language
 '''
 import logging
+import os
 from pathlib import Path
+
+# Force Hugging Face tools to run offline / local cache only
+os.environ["HF_HUB_OFFLINE"] = "1"
+
 import torch
 from cached_path import cached_path
 from flowtts.inference import FlowTTSPipeline, ModelConfig, AudioConfig
@@ -66,7 +71,7 @@ def main():
     )
 
     # Text for speech generation
-    test_text = "ยินดีที่ได้รู้จักคุณวันนี้อากาศดีมาก"
+    test_text = "สวัสดีฉันชื่อทาโก้ เป็นผู้ช่วย AI ที่ถูกพัฒนาโดยบริษัทเอ็นที ครับ"
     
     # Create output directory
     output_dir = Path("outputs_f5")
