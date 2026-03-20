@@ -1,7 +1,9 @@
 """
 ThonburianTTS Streaming API
-POST /tts  →  streams audio as WAV bytes
+POST /tts        →  streams audio as WAV bytes
+POST /tts/base64 →  returns {"audioBase64": "...", "contentType": "audio/wav"}
 """
+import base64
 import io
 import logging
 import wave
@@ -12,6 +14,7 @@ import numpy as np
 import torch
 from cached_path import cached_path
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from flowtts.inference import FlowTTSPipeline, ModelConfig, AudioConfig
@@ -104,6 +107,14 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Allow VoiceBotUI (Next.js dev server) to call this API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],          # tighten in production
+    allow_methods=["POST", "GET"],
+    allow_headers=["*"],
+)
+
 class TTSRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=500, example="สวัสดีครับ วันนี้อากาศดีมาก")
     speed: float = Field(default=1.0, ge=0.5, le=2.0)
@@ -154,6 +165,39 @@ async def text_to_speech(req: TTSRequest):
     except Exception as e:
         logger.error("TTS failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/tts/base64")
+async def text_to_speech_base64(req: TTSRequest):
+    """
+    Generate Thai speech and return as base64 JSON.
+
+    Compatible with VoiceBotUI Custom API spec:
+    Returns {"audioBase64": "...", "contentType": "audio/wav"}
+    """
+    try:
+        tts = get_tts_pipeline()
+        ref_path, ref_text = get_ref_audio()
+
+        logger.info("Generating (base64): %s", req.text)
+        output_path = tts(
+            text=req.text,
+            ref_voice=ref_path,
+            ref_text=ref_text,
+            output_file="temp_f5/stream_out.wav",
+            speed=req.speed,
+            check_duration=True,
+        )
+
+        wav_bytes = Path(output_path).read_bytes()
+        audio_b64 = base64.b64encode(wav_bytes).decode("utf-8")
+
+        return {"audioBase64": audio_b64, "contentType": "audio/wav"}
+
+    except Exception as e:
+        logger.error("TTS base64 failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/health")
 async def health():
